@@ -30,20 +30,31 @@ page.onInitialized = function() {
 	page.evaluate(function(globals) {
 		(function() {
 			var store = {};
+			phantomas.globals = [];
 
 			globals.forEach(function(varName) {
 				varName = varName.trim();
 
 				window.__defineSetter__(varName, function(val) {
-					console.log(varName + ' set!');
+					var stack;
 
 					try {
 						throw new Error('Backtrace');
 					}
 					catch(e) {
-						console.log(JSON.stringify(e.stackArray));
+						stack = e.stackArray;
 					}
 
+					// keep track of all globals
+					phantomas.globals.push({
+						name: varName,
+						file: '',
+						line: 0,
+						stack: stack,
+						type: typeof val
+					});
+
+					// store original value
 					store[varName] = val;
 				});
 				window.__defineGetter__(varName, function() {
@@ -61,6 +72,12 @@ page.onConsoleMessage = function(msg) {
 // load the page
 page.open(url, function (status) {
 	console.log('> Loaded <' + url + '>');
+
+	var globals = page.evaluate(function() {
+		return window.phantomas.globals;
+	});
+
+	console.log(JSON.stringify(globals));
 
 	phantom.exit();
 });
