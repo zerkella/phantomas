@@ -27,6 +27,13 @@ page.onInitialized = function() {
 	// let's take helper JS code from phantomas
 	page.injectJs('./../core/helper.js');
 
+	page.onError = function(err, stack) {
+		console.log(err);
+		console.log(JSON.stringify(stack));
+	};
+
+	// @see http://jyro.blogspot.com/2011/08/how-to-print-stack-trace-anywhere-in.html
+	// @see https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Global_Objects/Error/prototype
 	page.evaluate(function(globals) {
 		(function() {
 			var store = {};
@@ -36,14 +43,14 @@ page.onInitialized = function() {
 				varName = varName.trim();
 
 				window.__defineSetter__(varName, function(val) {
-					var stack;
+					throw new Error('Backtrace for ' + varName);
 
-					try {
-						throw new Error('Backtrace');
-					}
-					catch(e) {
+					var e = new Error('Backtrace'),
 						stack = e.stackArray;
-					}
+
+					console.log(varName + ' global set (' + typeof val + ')');
+					console.log(e.stack);
+					console.trace();
 
 					// keep track of all globals
 					phantomas.globals.push({
