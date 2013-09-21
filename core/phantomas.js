@@ -395,6 +395,7 @@ phantomas.prototype = {
 		// format results
 		var results = {
 			url: this.url,
+			cookies: this.cookies,
 			metrics: this.metrics,
 			notices: this.notices
 		};
