@@ -1,30 +1,40 @@
+#!/usr/bin/env phantomjs
 /**
  * PhantomJS-based web performance metrics collector
  *
  * Usage:
- *  phantomjs phantomas.js
+ *  ./phantomas.js
  *    --url=<page to check>
- *    [--timeout=5]
  *    [--format=json|csv|plain]
+ *    [--timeout=5]
+ *    ]--viewport=<width>x<height>]
  *    [--verbose]
  *    [--silent]
- *
- * @version 0.3
+ *    [--log=<log file>]
+ *    [--modules=moduleOne,moduleTwo]
+ *    [--skip-modules=moduleOne,moduleTwo]
+ *    [--user-agent='Custom user agent']
+ *    [--config='JSON config file']
+ *    [--cookie='bar=foo;domain=url']
+ *    [--no-externals]
+ *    [--allow-domain='domain,domain']
+ *    [--block-domain='domain,domain']
+ *    [--analyze-css]
+ *    [--film-strip]
  */
-
-// parse script arguments
 var args = require('system').args,
-	params = require('./lib/args').parse(args),
-	phantomas = require('./core/phantomas').phantomas,
+	// get absolute path (useful when phantomas is installed globally)
+	dir = require('fs').readLink(args[0]).replace(/phantomas.js$/, '') || '.',
+	// parse script arguments
+	params = require(dir + '/lib/args').parse(args),
+	phantomas = require(dir + '/core/phantomas'),
 	instance;
 
 // run phantomas
 instance = new phantomas(params);
 
 try {
-	instance.run(function() {
-		phantom.exit(0);
-	});
+	instance.run();
 }
 catch(ex) {
 	console.log('phantomas v' + phantomas.version + ' failed with an error:');

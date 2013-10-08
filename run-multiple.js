@@ -1,39 +1,71 @@
-#!/usr/local/bin/node
+#!/usr/bin/env node
+/*jshint -W083: false, -W099: false */
+
 /**
  * This is a helper NodeJS script allowing you to run phantomas multiple times and
  * get a nice looking table with all the metrics + avg / median / min / max values
  *
  * Usage:
  *  ./run-multiple.js
- *    --url=<page to check>
- *    --runs=<number of runs, defaults to 3>
- *    --timeout=<in seconds (for each run), default to 15>
+ *	--url=<page to check>
+ *	--runs=<number of runs, defaults to 3>
+ *	--timeout=<in seconds (for each run), default to 15>
+ *	[--modules=moduleOne,moduleTwo]
+ *	[--skip-modules=moduleOne,moduleTwo]
+ *	[--format=plain|json] (plain is default)
+ *		note: json format, prints only errorrs or the
+ *		results in json format, no other
+ *		messaging
  *
- * @version 0.1
+ * @version 0.2
  */
 var exec = require('child_process').exec,
-	args = process.argv.slice(2),
+	phantomjs = require('phantomjs'),
+	VERSION = require('./package').version,
+
+	args = process.argv.slice(1),
 	params = require('./lib/args').parse(args),
+
 	pads = require('./core/pads'),
 	lpad = pads.lpad,
 	rpad = pads.rpad;
 
 // handle --url and --runs CLI parameters
 var url = params.url,
-	runs = parseInt(params.runs) || 3,
-    	remainingRuns = runs,
+	runs = parseInt(params.runs, 10) || 3,
+	format = params.format || 'plain',
+	remainingRuns = runs,
 	metrics = [];
 
 function runPhantomas(params, callback) {
-	var cmd = 'phantomjs phantomas.js --format=json --url=' + params.url;
+	var timeMs = Date.now(),
+		cmd = [
+			phantomjs.path,
+			'phantomas.js',
+			'--format json',
+			'--url "' + params.url + '"'
+		];
 
 	if (params.timeout > 0) {
-		cmd += ' --timeout=' + params.timeout;
+		cmd.push(' --timeout ' + params.timeout);
+	}
+
+	if (params.modules) {
+		cmd.push(' --modules ' + params.modules);
+	}
+
+	if (params['skip-modules']) {
+		cmd.push(' --skip-modules ' + params['skip-modules']);
 	}
 
 	// @see http://nodejs.org/api/child_process.html#child_process_child_process_exec_command_options_callback
- 	exec(cmd, function(error, stdout, stderr) {
+	exec(cmd.join(' '), function(error, stdout, stderr) {
 		var res = false;
+
+		if (stderr) {
+			console.log("Error from phantomas: " + stderr);
+			process.exit(2);
+		}
 
 		try {
 			res = JSON.parse(stdout) || false;
@@ -46,27 +78,34 @@ function runPhantomas(params, callback) {
 		}
 
 		if (typeof callback === 'function') {
-			callback(res);
+			callback(res, Date.now() - timeMs);
 		}
 	});
 }
 
 function run() {
 	if (remainingRuns--) {
-		console.log('Remaining runs: ' + (remainingRuns + 1));
+		if (format === 'plain') {
+			console.log('Remaining runs: ' + (remainingRuns + 1));
+		}
 
-		runPhantomas(params, function(res) {
+		runPhantomas(params, function(res, timeMs) {
 			if (res) {
 				metrics.push(res.metrics);
 			}
+
+			if (format === 'plain') {
+				console.log('Run completed in ' + (timeMs/1000).toFixed(2) + ' s');
+			}
 			run();
 		});
-	}
-	else {
-		console.log('Done');
+	} else {
+		if (format === 'plain') {
+			console.log('Done');
+		}
 		formatResults(metrics);
 	}
-};
+}
 
 function formatResults(metrics) {
 	var entries = {},
@@ -80,8 +119,8 @@ function formatResults(metrics) {
 			sum: 0,
 			min: 0,
 			max: 0,
-			median: 0,
-			average: 0
+			median: undefined,
+			average: undefined
 		};
 	}
 
@@ -97,13 +136,18 @@ function formatResults(metrics) {
 	for (metric in entries) {
 		entry = entries[metric];
 
-		entry.values = entry.values.
-			filter(function(element) {
-				return element !== null;
-			}).
-			sort(function (a, b) {
-				return a - b;
-			});
+		if (typeof entry.values[0] === 'string') {
+			// don't sort metric with string value
+		}
+		else {
+			entry.values = entry.values.
+				filter(function(element) {
+					return element !== null;
+				}).
+				sort(function (a, b) {
+					return a - b;
+				});
+		}
 
 		if (entry.values.length === 0) {
 			continue;
@@ -111,6 +155,10 @@ function formatResults(metrics) {
 
 		entry.min = entry.values.slice(0, 1).pop();
 		entry.max = entry.values.slice(-1).pop();
+
+		if (typeof entry.values[0] === 'string') {
+			continue;
+		}
 
 		for (var i=0, len = entry.values.length++; i<len; i++) {
 			entry.sum += entry.values[i];
@@ -121,27 +169,31 @@ function formatResults(metrics) {
 	}
 
 	// print out a nice table
-	console.log("-------------------------------------------------------------------------------------------");
-	console.log("| " + rpad("Report from " + runs + " run(s) for <" + params.url + ">", 87) + " |");
-	console.log("-------------------------------------------------------------------------------------------");
-	console.log("| Metric                      | Min          | Max          | Average      | Median       |");
-	console.log("-------------------------------------------------------------------------------------------");
+	if (format === 'plain') {
+		console.log("----------------------------------------------------------------------------------------------");
+		console.log("| " + rpad("Report from " + runs + " run(s) for <" + params.url + "> using phantomas v" + VERSION, 90) + " |");
+		console.log("----------------------------------------------------------------------------------------------");
+		console.log("| " + [rpad("Metric", 30), rpad("Min", 12), rpad("Max", 12), rpad("Average", 12), rpad("Median", 12)].join(" | ") + " |");
+		console.log("----------------------------------------------------------------------------------------------");
 
-	for (metric in entries) {
-		entry = entries[metric];
+		for (metric in entries) {
+			entry = entries[metric];
 
-		console.log("| "+
-			[
-				rpad(metric, 27),
-				lpad(entry.min, 12),
-				lpad(entry.max, 12),
-				lpad(entry.average, 12),
-				lpad(entry.median, 12)
-			].join(" | ") +
-			" |");
+			console.log("| "+
+				[
+					rpad(metric, 30),
+					lpad(entry.min, 12),
+					lpad(entry.max, 12),
+					lpad(entry.average, 12),
+					lpad(entry.median, 12)
+				].join(" | ") +
+				" |");
+		}
+
+		console.log("---------------------------------------------------------------------------------------------");
+	} else {
+		console.log(JSON.stringify(metrics));
 	}
-
-	console.log("-------------------------------------------------------------------------------------------");
 }
 
 if (typeof url === 'undefined') {
@@ -149,6 +201,8 @@ if (typeof url === 'undefined') {
 	process.exit(1);
 }
 
-console.log('Performing ' + runs + ' phantomas run(s) for <' + params.url + '>...');
+if (format === 'plain') {
+	console.log('phantomas v' + VERSION + ' / PhantomJS v' + phantomjs.version + ' / nodejs ' + process.version);
+	console.log('Performing ' + runs + ' run(s) for <' + params.url + '>...');
+}
 run();
-
