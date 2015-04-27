@@ -386,10 +386,28 @@ phantomas.prototype = {
 		var parsedViewport = this.getParam('viewport', '1366x768', 'string').split('x');
 
 		if (parsedViewport.length === 2) {
-			this.page.viewportSize = {
-				width: parseInt(parsedViewport[0], 10) || 1280,
-				height: parseInt(parsedViewport[1], 10) || 1024
+			var viewportSize = {
+				width: parseInt(parsedViewport[0], 10) || 1366,
+				height: parseInt(parsedViewport[1], 10) || 768
 			};
+			
+			this.page.viewportSize = viewportSize;
+
+			var self = this;
+			this.on('init', function() {
+				self.page.evaluate(function(viewportSize) {
+					window.screen = {
+						width: viewportSize.width,
+						height: viewportSize.height,
+						availWidth: viewportSize.width,
+						availHeight: viewportSize.height,
+						availLeft: 0,
+						availTop: 0,
+						colorDepth: 24,
+						pixelDepth: 24
+					};
+				}, viewportSize);
+			});
 		}
 
 		// setup user agent /  --user-agent=custom-agent
