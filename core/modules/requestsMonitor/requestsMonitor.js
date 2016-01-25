@@ -300,7 +300,7 @@ exports.module = function(phantomas) {
 					entry.contentLength = entry.bodySize;
 					phantomas.log('%s: %j', 'contentLength missing', {url: entry.url, bodySize: entry.bodySize});
 				}
-
+				phantomas.addOffender('allrequests', JSON.stringify(entry));
 				// requests stats
 				if (!entry.isBase64) {
 					phantomas.incrMetric('requests');
